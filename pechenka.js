@@ -9,7 +9,8 @@ const categorySelectionDiv = document.getElementById('category-selection');
 const predictionTextElement = document.getElementById('prediction-text');
 
 let predictionsData = {};
-const STORAGE_KEY = 'pechenka_user_stats';
+const STORAGE_KEY = 'pechenka_user_stats_v2';
+const MAX_SHOWN_PREDICTIONS = 30;
 
 // Function to get current date as YYYY-MM-DD
 function getCurrentDateString() {
@@ -18,6 +19,14 @@ function getCurrentDateString() {
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+}
+
+// Function to get current month as YYYY-MM
+function getCurrentMonthString() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
 }
 
 // Function to fetch predictions
@@ -37,151 +46,175 @@ async function loadPredictions() {
     } catch (error) {
         console.error('Failed to load predictions (подробная ошибка):', error);
         predictionTextElement.textContent = 'Не удалось загрузить предсказания. Попробуйте позже. Проверьте консоль для деталей.';
-        // Кнопка останется неактивной
+    }
+}
+
+async function getUserStats() {
+    try {
+        const storedData = await vkBridge.send('VKWebAppStorageGet', { keys: [STORAGE_KEY] });
+        if (storedData.keys && storedData.keys[0].value && storedData.keys[0].value.length > 0) {
+            try {
+                return JSON.parse(storedData.keys[0].value);
+            } catch (e) {
+                console.error("Error parsing userStats from VK Storage", e);
+            }
+        }
+    } catch (error) {
+        console.error("Error fetching userStats from VK Storage", error);
+    }
+    // Return default structure if not found or error
+    return {
+        lastPlayAM: '',
+        lastPlayPM: '',
+        shownPredictions: [],
+        predictionsMonth: getCurrentMonthString()
+    };
+}
+
+async function setUserStats(stats) {
+    try {
+        await vkBridge.send('VKWebAppStorageSet', { key: STORAGE_KEY, value: JSON.stringify(stats) });
+        console.log('User stats updated in VK Storage:', stats);
+    } catch (error) {
+        console.error("Error updating user stats in VK Storage:", error);
     }
 }
 
 // Function to check play eligibility and display categories
 async function checkEligibilityAndDisplayCategories() {
-    predictionTextElement.textContent = ''; // Clear previous message/prediction
-    categorySelectionDiv.innerHTML = ''; // Clear previous categories
-    askButton.disabled = true; // Disable while checking
+    predictionTextElement.textContent = '';
+    categorySelectionDiv.innerHTML = '';
+    askButton.disabled = true;
 
-    try {
-        const storedData = await vkBridge.send('VKWebAppStorageGet', { keys: [STORAGE_KEY] });
-        let userStats = {};
-        if (storedData.keys && storedData.keys[0].value) {
-            try {
-                userStats = JSON.parse(storedData.keys[0].value);
-            } catch (e) {
-                console.error("Error parsing userStats from VK Storage", e);
-                userStats = {}; // Reset if parsing fails
-            }
-        }
+    let userStats = await getUserStats();
 
-        const currentDateStr = getCurrentDateString();
-        const currentHour = new Date().getHours();
-        let canPlay = false;
-        let currentSlot = '';
-
-        if (currentHour < 12) { // AM Slot (00:00 - 11:59)
-            currentSlot = 'AM';
-            if (userStats.lastPlayAM !== currentDateStr) {
-                canPlay = true;
-            }
-        } else { // PM Slot (12:00 - 23:59)
-            currentSlot = 'PM';
-            if (userStats.lastPlayPM !== currentDateStr) {
-                canPlay = true;
-            }
-        }
-
-        if (canPlay) {
-            displayCategoryButtons();
-        } else {
-            const message = currentSlot === 'AM' ? 
-                'Вы уже получили предсказание сегодня утром. Попробуйте после 12:00.' : 
-                'Вы уже получили предсказание сегодня. Попробуйте завтра!';
-            predictionTextElement.textContent = message;
-        }
-
-    } catch (error) {
-        console.error("Error checking eligibility from VK Storage:", error);
-        predictionTextElement.textContent = 'Не удалось проверить историю игры. Попробуйте еще раз.';
-        // Можно показать категории, если не удалось проверить, или заблокировать - пока показываем
-        displayCategoryButtons(); // Or handle error more gracefully
-    } finally {
-        askButton.disabled = false; // Re-enable button
+    // Monthly reset of shown predictions
+    const currentMonthStr = getCurrentMonthString();
+    if (userStats.predictionsMonth !== currentMonthStr) {
+        userStats.shownPredictions = [];
+        userStats.predictionsMonth = currentMonthStr;
+        // No need to save here, will be saved after prediction or if eligibility fails and we want to save the month reset
     }
+
+    const currentDateStr = getCurrentDateString();
+    const currentHour = new Date().getHours();
+    let canPlay = false;
+    let currentSlot = '';
+
+    if (currentHour < 12) {
+        currentSlot = 'AM';
+        if (userStats.lastPlayAM !== currentDateStr) canPlay = true;
+    } else {
+        currentSlot = 'PM';
+        if (userStats.lastPlayPM !== currentDateStr) canPlay = true;
+    }
+
+    if (canPlay) {
+        displayCategoryButtons();
+    } else {
+        const message = currentSlot === 'AM' ? 
+            'Вы уже получили предсказание сегодня утром. Попробуйте после 12:00.' : 
+            'Вы уже получили предсказание сегодня. Попробуйте завтра!';
+        predictionTextElement.textContent = message;
+        await setUserStats(userStats); // Save stats in case month was reset
+    }
+    askButton.disabled = false;
 }
 
 function displayCategoryButtons() {
-    categorySelectionDiv.innerHTML = ''; // Clear previous categories
-    // predictionTextElement.textContent = ''; // Cleared in checkEligibilityAndDisplayCategories
-
+    categorySelectionDiv.innerHTML = '';
     const categories = Object.keys(predictionsData).filter(cat => cat !== "Нейтральные и универсальные");
-    
     categories.forEach(category => {
         const button = document.createElement('button');
         button.textContent = category;
         button.addEventListener('click', () => getPrediction(category));
         categorySelectionDiv.appendChild(button);
     });
-
     const randomButton = document.createElement('button');
     randomButton.textContent = 'На удачу';
+    randomButton.classList.add('random-luck-button');
     randomButton.addEventListener('click', () => getPrediction(null));
     categorySelectionDiv.appendChild(randomButton);
     predictionTextElement.textContent = 'Выберите категорию или испытайте удачу:';
 }
 
-// Function to get and display a prediction, then update storage
 async function getPrediction(category) {
-    let chosenCategory = category;
-    let prediction = '';
+    let chosenCategoryName = category;
+    let predictionText = '';
+    askButton.disabled = true; // Disable button during processing
 
     if (Object.keys(predictionsData).length === 0) {
         predictionTextElement.textContent = 'Данные предсказаний еще не загружены. Подождите.';
+        askButton.disabled = false;
         return;
     }
 
-    if (!chosenCategory) { // "На удачу"
+    let userStats = await getUserStats();
+    // Monthly reset check again, in case user left tab open for long
+    const currentMonthStr = getCurrentMonthString();
+    if (userStats.predictionsMonth !== currentMonthStr) {
+        userStats.shownPredictions = [];
+        userStats.predictionsMonth = currentMonthStr;
+    }
+
+    if (!chosenCategoryName) { // "На удачу"
         const availableCategories = Object.keys(predictionsData).filter(cat => cat !== "Нейтральные и универсальные");
         if (availableCategories.length > 0) {
-            chosenCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
+            chosenCategoryName = availableCategories[Math.floor(Math.random() * availableCategories.length)];
         } else {
             predictionTextElement.textContent = 'Нет доступных категорий для предсказания.';
             categorySelectionDiv.innerHTML = '';
+            askButton.disabled = false;
+            await setUserStats(userStats); // Save potential month reset
             return;
         }
     }
 
-    if (predictionsData[chosenCategory] && predictionsData[chosenCategory].length > 0) {
-        const categoryPredictions = predictionsData[chosenCategory];
-        prediction = categoryPredictions[Math.floor(Math.random() * categoryPredictions.length)];
-    } else {
-        prediction = 'Не удалось получить предсказание для этой категории.';
-    }
-
-    predictionTextElement.textContent = prediction;
-    categorySelectionDiv.innerHTML = ''; // Clear category buttons after selection
-
-    // Update storage
-    try {
-        const storedData = await vkBridge.send('VKWebAppStorageGet', { keys: [STORAGE_KEY] });
-        let userStats = {};
-        if (storedData.keys && storedData.keys[0].value) {
-            try {
-                userStats = JSON.parse(storedData.keys[0].value);
-            } catch (e) { userStats = {}; }
-        }
-
-        const currentDateStr = getCurrentDateString();
-        const currentHour = new Date().getHours();
-
-        if (currentHour < 12) {
-            userStats.lastPlayAM = currentDateStr;
+    const categoryPredictions = predictionsData[chosenCategoryName];
+    if (categoryPredictions && categoryPredictions.length > 0) {
+        let availableNewPredictions = categoryPredictions.filter(p => !userStats.shownPredictions.includes(p));
+        
+        if (availableNewPredictions.length > 0) {
+            predictionText = availableNewPredictions[Math.floor(Math.random() * availableNewPredictions.length)];
         } else {
-            userStats.lastPlayPM = currentDateStr;
+            // All predictions in this category were shown recently, pick any random from this category
+            predictionText = categoryPredictions[Math.floor(Math.random() * categoryPredictions.length)];
+            // Optionally, add a note that it might be a repeat or that all unique for the period were shown.
         }
-        await vkBridge.send('VKWebAppStorageSet', { key: STORAGE_KEY, value: JSON.stringify(userStats) });
-        console.log('User stats updated in VK Storage:', userStats);
-    } catch (error) {
-        console.error("Error updating user stats in VK Storage:", error);
-        // Можно уведомить пользователя, что его попытка может не сохраниться
+
+        // Update shownPredictions list
+        userStats.shownPredictions.push(predictionText);
+        if (userStats.shownPredictions.length > MAX_SHOWN_PREDICTIONS) {
+            userStats.shownPredictions.shift(); // Remove the oldest
+        }
+
+    } else {
+        predictionText = 'Не удалось получить предсказание для этой категории.';
     }
+
+    predictionTextElement.textContent = predictionText;
+    categorySelectionDiv.innerHTML = '';
+
+    // Update last play time
+    const currentDateStr = getCurrentDateString();
+    const currentHour = new Date().getHours();
+    if (currentHour < 12) {
+        userStats.lastPlayAM = currentDateStr;
+    } else {
+        userStats.lastPlayPM = currentDateStr;
+    }
+    
+    await setUserStats(userStats);
+    askButton.disabled = false; // Re-enable button
 }
 
 // Event Listeners
 askButton.addEventListener('click', checkEligibilityAndDisplayCategories);
-
-// Load predictions when the script runs
 loadPredictions();
 
-// Example: Get user info (can be kept or removed / used)
 vkBridge.send('VKWebAppGetUserInfo')
   .then(data => {
-    console.log('User info:', data); // Useful for debugging user-specific issues
+    console.log('User info:', data); 
   })
   .catch(error => {
     console.error('Failed to get user info:', error);

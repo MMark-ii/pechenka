@@ -66,6 +66,14 @@ body {
     background-color: #4cae4c;
 }
 
+#category-selection button.random-luck-button {
+    background-color: #ff8c00; /* Оранжевый цвет */
+}
+
+#category-selection button.random-luck-button:hover {
+    background-color: #cc7000; /* Более темный оранжевый при наведении */
+}
+
 #prediction-text {
     margin-top: 20px;
     font-size: 1.1em;
