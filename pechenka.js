@@ -16,7 +16,7 @@ const MAX_SHOWN_PREDICTIONS = 30;
 // Developer/Debug Features
 let isDebugMode = false;
 let currentUserId = null;
-const YOUR_SERVER_BASE_URL = 'https://pechenka.n-vavilon.ru/'; // ЗАМЕНИТЕ НА URL ВАШЕГО СЕРВЕРА АДМИНКИ
+const YOUR_SERVER_BASE_URL = 'https://pechenka.n-vavilon.ru:5001'; // ЗАМЕНИТЕ НА URL ВАШЕГО СЕРВЕРА АДМИНКИ
 
 // Function to get current date as YYYY-MM-DD
 function getCurrentDateString() {
