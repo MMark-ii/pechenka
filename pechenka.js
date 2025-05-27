@@ -16,6 +16,8 @@ const MAX_SHOWN_PREDICTIONS = 30;
 // Developer/Debug Features
 let isDebugMode = false;
 let currentUserId = null;
+let currentUserFirstName = null;
+let currentUserLastName = null;
 const YOUR_SERVER_BASE_URL = 'https://pechenka.n-vavilon.ru:5001'; // ЗАМЕНИТЕ НА URL ВАШЕГО СЕРВЕРА АДМИНКИ
 
 // Function to get current date as YYYY-MM-DD
@@ -39,6 +41,8 @@ async function initializeDevelFeatures() {
     try {
         const userInfo = await vkBridge.send('VKWebAppGetUserInfo');
         currentUserId = userInfo.id;
+        currentUserFirstName = userInfo.first_name;
+        currentUserLastName = userInfo.last_name;
         console.log('User info for server interaction:', userInfo);
 
         // Запрашиваем статус отладки с сервера
@@ -230,6 +234,8 @@ async function getPrediction(category) {
 
     const logEntry = {
         userId: currentUserId,
+        firstName: currentUserFirstName,
+        lastName: currentUserLastName,
         prediction: predictionText,
         category: chosenCategoryName,
         timestamp: new Date().toISOString(),
