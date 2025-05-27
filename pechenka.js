@@ -200,6 +200,7 @@ function displayCategoryButtons() {
 }
 
 async function getPrediction(category) {
+    const wasRandomChoice = (category === null); // Запоминаем, был ли клик "На удачу"
     let chosenCategoryName = category;
     let predictionText = '';
     askButton.disabled = true;
@@ -255,6 +256,7 @@ async function getPrediction(category) {
         lastName: currentUserLastName,
         prediction: predictionText,
         category: chosenCategoryName,
+        choseRandomLuck: wasRandomChoice,
         timestamp: new Date().toISOString(),
         isDebug: isDebugMode // Отправляем текущий статус отладки
     };
