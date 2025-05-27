@@ -45,26 +45,43 @@ async function initializeDevelFeatures() {
         currentUserLastName = userInfo.last_name;
         console.log('User info for server interaction:', userInfo);
 
-        // Запрашиваем статус отладки с сервера
+        // Новый запрос на /api/activity/launch
         if (currentUserId && YOUR_SERVER_BASE_URL !== 'YOUR_SERVER_BASE_URL') {
-            const response = await fetch(`${YOUR_SERVER_BASE_URL}/api/get_debug_status?userId=${currentUserId}`);
-            if (response.ok) {
-                const data = await response.json();
-                if (data.isDebug) {
-                    isDebugMode = true;
-                    if (debugIndicatorElement) {
-                        debugIndicatorElement.textContent = 'РЕЖИM ОТЛАДКИ АКТИВЕН (сервер)';
+            try {
+                const launchResponse = await fetch(`${YOUR_SERVER_BASE_URL}/api/activity/launch`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: currentUserId,
+                        firstName: currentUserFirstName,
+                        lastName: currentUserLastName
+                    }),
+                });
+
+                if (launchResponse.ok) {
+                    const launchData = await launchResponse.json();
+                    if (launchData.status === 'success' && typeof launchData.isDebug === 'boolean') {
+                        isDebugMode = launchData.isDebug;
+                        if (isDebugMode && debugIndicatorElement) {
+                            debugIndicatorElement.textContent = 'РЕЖИM ОТЛАДКИ АКТИВЕН (сервер)';
+                        }
+                        console.log('Launch registered and debug status received:', isDebugMode);
+                    } else {
+                        console.warn('Server response for launch was not as expected:', launchData);
                     }
-                    console.log('Debug mode activated via server.');
+                } else {
+                    console.warn('Could not register launch or fetch debug status from server:', launchResponse.status, launchResponse.statusText);
                 }
-            } else {
-                console.warn('Could not fetch debug status from server:', response.status);
+            } catch (e) {
+                console.error('Error during launch request:', e);
             }
         } else if (YOUR_SERVER_BASE_URL === 'YOUR_SERVER_BASE_URL'){
-            console.warn('YOUR_SERVER_BASE_URL is not set. Debug status check skipped.');
+            console.warn('YOUR_SERVER_BASE_URL is not set. Launch registration and debug status check skipped.');
         }
     } catch (error) {
-        console.error('Error in initializeDevelFeatures (user info or debug status):', error);
+        console.error('Error in initializeDevelFeatures (user info or launch/debug status):', error);
     }
 }
 
